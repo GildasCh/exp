@@ -5,14 +5,17 @@
 package filesystem
 
 import (
-	"io/ioutil"
+	"crypto/sha256"
+	"encoding/binary"
+	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"upspin.io/access"
 	"upspin.io/errors"
-	"upspin.io/pack"
+	"upspin.io/pack/packutil"
 	"upspin.io/path"
 	"upspin.io/serverutil"
 	"upspin.io/upspin"
@@ -106,31 +109,58 @@ func (s dirServer) entry(file string) (*upspin.DirEntry, error) {
 		return entry, nil
 	}
 
-	p := pack.Lookup(packing)
-	bp, err := p.Pack(s.server, entry)
-	if err != nil {
-		return nil, err
-	}
-	contents, err := ioutil.ReadFile(file)
-	if err != nil {
-		return nil, err
-	}
-	// Ignore the returned "ciphertext", as using the plain packer
-	// it is equivalent to the cleartext.
-	_, err = bp.Pack(contents)
-	if err != nil {
-		return nil, err
-	}
-	bp.SetLocation(upspin.Location{
-		Endpoint:  s.server.StoreEndpoint(),
-		Reference: upspin.Reference(file[len(s.root):]),
-	})
-	if err := bp.Close(); err != nil {
-		return nil, err
-	}
+	entry.Blocks = []upspin.DirBlock{upspin.DirBlock{
+		Location: upspin.Location{
+			Endpoint:  s.server.StoreEndpoint(),
+			Reference: upspin.Reference(file[len(s.root):]),
+		},
+		Offset: 0,
+		Size:   info.Size(),
+	}}
+
+	// Compute entry signature with dkey=sum=0.
+	dkey := make([]byte, aesKeyLen)
+	sum := make([]byte, sha256.Size)
+	sig, err := s.server.Factotum().FileSign(s.server.Factotum().DirEntryHash(entry.SignedName, entry.Link, entry.Attr, entry.Packing, entry.Time, dkey, sum))
+
+	pdMarshal(&entry.Packdata, sig, upspin.Signature{})
+
+	fmt.Printf("entry: %#v\n", entry)
 
 	s.dirEntries.Add(file, entry)
 	return entry, nil
+}
+
+const (
+	aesKeyLen     = 32
+	marshalBufLen = 66
+)
+
+var (
+	zero = big.NewInt(0)
+)
+
+func pdMarshal(dst *[]byte, sig, sig2 upspin.Signature) error {
+	// sig2 is a signature with another owner key, to enable smoother key rotation.
+	n := packdataLen()
+	if len(*dst) < n {
+		*dst = make([]byte, n)
+	}
+	n = 0
+	n += packutil.PutBytes((*dst)[n:], sig.R.Bytes())
+	n += packutil.PutBytes((*dst)[n:], sig.S.Bytes())
+	if sig2.R == nil {
+		sig2 = upspin.Signature{R: zero, S: zero}
+	}
+	n += packutil.PutBytes((*dst)[n:], sig2.R.Bytes())
+	n += packutil.PutBytes((*dst)[n:], sig2.S.Bytes())
+	*dst = (*dst)[:n]
+	return nil
+}
+
+// packdataLen returns n big enough for packing, sig.R, sig.S
+func packdataLen() int {
+	return 2*marshalBufLen + binary.MaxVarintLen64 + 1
 }
 
 // upspinPathFromLocal returns the upspin.PathName for
