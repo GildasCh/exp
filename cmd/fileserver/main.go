@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Command fileserver serves a local file system as an Upspin tree.
-package main // import "exp.upspin.io/cmd/fileserver"
+package main // import "github.com/gildasch/exp/cmd/fileserver"
 
 import (
 	"flag"
@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"os"
 
-	"exp.upspin.io/filesystem"
+	"github.com/gildasch/exp/filesystem"
 
 	"upspin.io/cloud/https"
 	"upspin.io/config"

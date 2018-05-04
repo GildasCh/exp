@@ -5,7 +5,7 @@
 package filesystem
 
 import (
-	"io/ioutil"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,20 +111,41 @@ func (s dirServer) entry(file string) (*upspin.DirEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	contents, err := ioutil.ReadFile(file)
+
+	f, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
-	// Ignore the returned "ciphertext", as using the plain packer
-	// it is equivalent to the cleartext.
-	_, err = bp.Pack(contents)
-	if err != nil {
-		return nil, err
+	defer f.Close()
+
+	size := info.Size()
+	offset := int64(0)
+	for size > 0 {
+		ss := int64(upspin.BlockSize)
+		if ss > size {
+			ss = size
+		}
+		size -= ss
+		ref := fmt.Sprintf("%s-%d", file[len(s.root):], offset)
+
+		contents := make([]byte, upspin.BlockSize)
+		_, err = f.Read(contents)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = bp.Pack(contents)
+		if err != nil {
+			return nil, err
+		}
+		bp.SetLocation(upspin.Location{
+			Endpoint:  s.server.StoreEndpoint(),
+			Reference: upspin.Reference(ref),
+		})
+
+		offset += ss
 	}
-	bp.SetLocation(upspin.Location{
-		Endpoint:  s.server.StoreEndpoint(),
-		Reference: upspin.Reference(file[len(s.root):]),
-	})
+
 	if err := bp.Close(); err != nil {
 		return nil, err
 	}

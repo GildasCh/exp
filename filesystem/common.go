@@ -4,7 +4,7 @@
 
 // Package filesystem provides a DirServer and StoreServer that serve
 // files from a local file system.
-package filesystem // import "exp.upspin.io/filesystem"
+package filesystem // import "github.com/gildasch/exp/filesystem"
 
 import (
 	"io/ioutil"
