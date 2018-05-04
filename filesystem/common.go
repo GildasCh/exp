@@ -15,6 +15,7 @@ import (
 	"upspin.io/access"
 	"upspin.io/cache"
 	"upspin.io/errors"
+	_ "upspin.io/pack/plain"
 	"upspin.io/path"
 	"upspin.io/upspin"
 )

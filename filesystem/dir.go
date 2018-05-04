@@ -5,17 +5,13 @@
 package filesystem
 
 import (
-	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
-	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"upspin.io/access"
 	"upspin.io/errors"
-	"upspin.io/pack/packutil"
 	"upspin.io/path"
 	"upspin.io/serverutil"
 	"upspin.io/upspin"
@@ -123,18 +119,7 @@ func (s dirServer) entry(file string) (*upspin.DirEntry, error) {
 		Size:   info.Size(),
 	}}
 
-	// Compute entry signature with dkey=sum=0.
-	dkey := make([]byte, aesKeyLen)
-	sum := make([]byte, sha256.Size)
-	sig, err := s.user.Factotum().FileSign(s.user.Factotum().DirEntryHash(entry.SignedName, entry.Link, entry.Attr, entry.Packing, entry.Time, dkey, sum))
-	if err != nil {
-		return nil, err
-	}
-
-	err = pdMarshal(&entry.Packdata, sig, upspin.Signature{})
-	if err != nil {
-		return nil, err
-	}
+	simplePack(s.server, entry)
 
 	s.dirEntries.Add(file, entry)
 
@@ -142,38 +127,6 @@ func (s dirServer) entry(file string) (*upspin.DirEntry, error) {
 	fmt.Printf("pack size: %#v\n", len(entry.Packdata))
 
 	return entry, nil
-}
-
-const (
-	aesKeyLen     = 32
-	marshalBufLen = 66
-)
-
-var (
-	zero = big.NewInt(0)
-)
-
-func pdMarshal(dst *[]byte, sig, sig2 upspin.Signature) error {
-	// sig2 is a signature with another owner key, to enable smoother key rotation.
-	n := packdataLen()
-	if len(*dst) < n {
-		*dst = make([]byte, n)
-	}
-	n = 0
-	n += packutil.PutBytes((*dst)[n:], sig.R.Bytes())
-	n += packutil.PutBytes((*dst)[n:], sig.S.Bytes())
-	if sig2.R == nil {
-		sig2 = upspin.Signature{R: zero, S: zero}
-	}
-	n += packutil.PutBytes((*dst)[n:], sig2.R.Bytes())
-	n += packutil.PutBytes((*dst)[n:], sig2.S.Bytes())
-	*dst = (*dst)[:n]
-	return nil
-}
-
-// packdataLen returns n big enough for packing, sig.R, sig.S
-func packdataLen() int {
-	return 2*marshalBufLen + binary.MaxVarintLen64 + 1
 }
 
 // upspinPathFromLocal returns the upspin.PathName for
