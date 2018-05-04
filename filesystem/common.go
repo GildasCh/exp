@@ -7,10 +7,13 @@
 package filesystem // import "github.com/gildasch/exp/filesystem"
 
 import (
-	"io/ioutil"
+	"fmt"
+	"io"
 	"os"
 	gPath "path"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"upspin.io/access"
 	"upspin.io/cache"
@@ -141,6 +144,16 @@ func (s *Server) whichAccess(parsed path.Parsed) (upspin.PathName, error) {
 // readFile returns the contents of the named file relative to the server root.
 // The file must be world-readable, or readFile returns a permissoin error.
 func (s *Server) readFile(name upspin.PathName) ([]byte, error) {
+	splitName := strings.Split(string(name), "-")
+	offset := int64(0)
+	if i, err := strconv.ParseInt(splitName[len(splitName)-1], 10, 64); len(splitName) >= 2 && err == nil {
+		name = upspin.PathName(strings.Join(splitName[:len(splitName)-1], "-"))
+		offset = i
+	}
+
+	fmt.Println(name, offset, splitName)
+	fmt.Println(strconv.ParseInt(splitName[len(splitName)-1], 10, 64))
+
 	parsed, err := path.Parse(name)
 	if err != nil {
 		return nil, err
@@ -160,6 +173,19 @@ func (s *Server) readFile(name upspin.PathName) ([]byte, error) {
 		return nil, errors.E(errors.Permission, "not world-readable", name)
 	}
 
-	// TODO(r, adg): think about symbolic links.
-	return ioutil.ReadFile(localName)
+	f, err := os.Open(localName)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	contents := make([]byte, upspin.BlockSize)
+	n, err := f.ReadAt(contents, offset)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+
+	fmt.Printf("read %d of %s at %d\n", upspin.BlockSize, localName, offset)
+
+	return contents[:n], nil
 }

@@ -5,6 +5,8 @@
 package filesystem
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"upspin.io/access"
@@ -33,11 +35,17 @@ var errNotDialed = errors.E(errors.Internal, "must Dial before making request")
 func (s storeServer) Get(ref upspin.Reference) ([]byte, *upspin.Refdata, []upspin.Location, error) {
 	const op errors.Op = "store/filesystem.Get"
 
+	fmt.Printf("Get %s\n", ref)
+
 	if s.user == nil {
 		return nil, nil, nil, errors.E(op, errNotDialed)
 	}
 
-	pathName := upspin.PathName(s.server.UserName()) + "/" + upspin.PathName(ref)
+	splitRef := strings.Split(string(ref), "-")
+	ref = upspin.Reference(strings.Join(splitRef[:len(splitRef)-1], "-"))
+	offset := splitRef[len(splitRef)-1]
+
+	pathName := upspin.PathName(s.server.UserName()) + "" + upspin.PathName(ref)
 	parsed, err := path.Parse(pathName)
 	if err != nil {
 		return nil, nil, nil, errors.E(op, err)
@@ -50,7 +58,8 @@ func (s storeServer) Get(ref upspin.Reference) ([]byte, *upspin.Refdata, []upspi
 		return nil, nil, nil, errors.E(op, parsed.Path(), access.ErrPermissionDenied)
 	}
 
-	data, err := s.readFile(pathName)
+	fmt.Printf("readFile %s, offset %s\n", pathName, offset)
+	data, err := s.readFile(upspin.PathName(fmt.Sprintf("%s-%s", pathName, offset)))
 	if err != nil {
 		return nil, nil, nil, errors.E(op, err)
 	}
