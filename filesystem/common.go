@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	packing         = upspin.EEIntegrityPack
+	packing         = upspin.PlainPack
 	maxCacheEntries = 10000
 )
 

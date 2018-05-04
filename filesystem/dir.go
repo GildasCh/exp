@@ -109,25 +109,38 @@ func (s dirServer) entry(file string) (*upspin.DirEntry, error) {
 		return entry, nil
 	}
 
+	offs, err := entry.Size()
+	if err != nil {
+		return nil, err
+	}
+
 	entry.Blocks = []upspin.DirBlock{upspin.DirBlock{
 		Location: upspin.Location{
 			Endpoint:  s.server.StoreEndpoint(),
 			Reference: upspin.Reference(file[len(s.root):]),
 		},
-		Offset: 0,
+		Offset: offs,
 		Size:   info.Size(),
 	}}
 
 	// Compute entry signature with dkey=sum=0.
 	dkey := make([]byte, aesKeyLen)
 	sum := make([]byte, sha256.Size)
-	sig, err := s.server.Factotum().FileSign(s.server.Factotum().DirEntryHash(entry.SignedName, entry.Link, entry.Attr, entry.Packing, entry.Time, dkey, sum))
+	sig, err := s.user.Factotum().FileSign(s.user.Factotum().DirEntryHash(entry.SignedName, entry.Link, entry.Attr, entry.Packing, entry.Time, dkey, sum))
+	if err != nil {
+		return nil, err
+	}
 
-	pdMarshal(&entry.Packdata, sig, upspin.Signature{})
-
-	fmt.Printf("entry: %#v\n", entry)
+	err = pdMarshal(&entry.Packdata, sig, upspin.Signature{})
+	if err != nil {
+		return nil, err
+	}
 
 	s.dirEntries.Add(file, entry)
+
+	fmt.Printf("entry: %#v\n", entry)
+	fmt.Printf("pack size: %#v\n", len(entry.Packdata))
+
 	return entry, nil
 }
 
